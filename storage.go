@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
 	_ "github.com/lib/pq"
@@ -59,20 +60,30 @@ func (s *PostgresStore) CreateAccount(a *Account) error {
 	(first_name, last_name, number, balance) 
 	VALUES ($1, $2, $3, $4)
 	`
-	resp, err := s.db.Query(query, a.FirstName, a.LastName, a.Number, a.Balance)
+	_, err := s.db.Query(query, a.FirstName, a.LastName, a.Number, a.Balance)
 	if err != nil {
 		return err
 	}
-	log.Println(resp)
+
 	return nil
 }
 
-func (s *PostgresStore) DeleteAccount(int) error {
-	return nil
+func (s *PostgresStore) DeleteAccount(id int) error {
+	_, err := s.db.Exec("DELETE FROM account WHERE id=$1", id)
+	return err
 }
 
-func (s *PostgresStore) GetAccountById(int) (*Account, error) {
-	return &Account{}, nil
+func (s *PostgresStore) GetAccountById(id int) (*Account, error) {
+	rows, err := s.db.Query(`SELECT * FROM account WHERE id = $1;`, id)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		return scanIntoAccount(rows)
+	}
+
+	return nil, fmt.Errorf("account %d not found", id)
 }
 
 func (s *PostgresStore) UpdateAccount(*Account) error {
@@ -88,14 +99,7 @@ func (s *PostgresStore) GetAccounts() ([]*Account, error) {
 
 	accounts := []*Account{}
 	for rows.Next() {
-		account := new(Account)
-		err := rows.Scan(
-			&account.ID,
-			&account.FirstName,
-			&account.LastName,
-			&account.Number,
-			&account.Balance,
-			&account.CreatedAt)
+		account, err := scanIntoAccount(rows)
 
 		if err != nil {
 			return nil, err
@@ -105,4 +109,21 @@ func (s *PostgresStore) GetAccounts() ([]*Account, error) {
 	}
 
 	return accounts, nil
+}
+
+func scanIntoAccount(rows *sql.Rows) (*Account, error) {
+	account := new(Account)
+	err := rows.Scan(
+		&account.ID,
+		&account.FirstName,
+		&account.LastName,
+		&account.Number,
+		&account.Balance,
+		&account.CreatedAt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return account, err
 }

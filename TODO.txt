@@ -1,0 +1,2 @@
+- docs with openapi.yml and scalar
+- add Dockerfile

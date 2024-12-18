@@ -26,6 +26,8 @@ func NewAPIServer(listenAddr string, store Storage) *APIServer {
 
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
+
+	router.HandleFunc("/login", makeHTTPHandleFunc(s.handleLogin))
 	router.HandleFunc("/account", makeHTTPHandleFunc(s.handleAccount))
 	router.HandleFunc("/account/{id}", withJWTAuth(makeHTTPHandleFunc(s.handleAccountById), s.store))
 	router.HandleFunc("/transfer", makeHTTPHandleFunc(s.handleTransfer))
@@ -35,11 +37,38 @@ func (s *APIServer) Run() {
 	http.ListenAndServe(s.listenAddr, router)
 }
 
+func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return fmt.Errorf("method not allowed %s", r.Method)
+	}
+
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return err
+	}
+
+	acc, err := s.store.GetAccountByNumber(req.Number)
+	if err != nil {
+		return err
+	}
+
+	if !acc.CheckPassword(req.Password) {
+		return fmt.Errorf("not authenticated")
+	}
+
+	token, err := createJWT(acc)
+	if err != nil {
+		return err
+	}
+
+	return WriteJSON(w, http.StatusOK, LoginResponse{Token: token})
+}
+
 func (s *APIServer) handleAccount(w http.ResponseWriter, r *http.Request) error {
-	if r.Method == "GET" {
+	if r.Method == http.MethodGet {
 		return s.handleGetAccount(w, r)
 	}
-	if r.Method == "POST" {
+	if r.Method == http.MethodPost {
 		return s.handleCreateAccount(w, r)
 	}
 	return fmt.Errorf("method not allowed %s", r.Method)
@@ -59,7 +88,7 @@ func (s *APIServer) handleAccountById(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	if r.Method == "GET" {
+	if r.Method == http.MethodGet {
 		account, err := s.store.GetAccountById(id)
 		if err != nil {
 			return err
@@ -68,7 +97,7 @@ func (s *APIServer) handleAccountById(w http.ResponseWriter, r *http.Request) er
 		return WriteJSON(w, http.StatusOK, account)
 	}
 
-	if r.Method == "DELETE" {
+	if r.Method == http.MethodDelete {
 		return s.store.DeleteAccount(id)
 	}
 
@@ -76,19 +105,17 @@ func (s *APIServer) handleAccountById(w http.ResponseWriter, r *http.Request) er
 }
 
 func (s *APIServer) handleCreateAccount(w http.ResponseWriter, r *http.Request) error {
-	createAccReq := new(CreateAccountRequest)
-	if err := json.NewDecoder(r.Body).Decode(createAccReq); err != nil {
+	req := new(CreateAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		return err
 	}
 
-	account := NewAccount(createAccReq.FirstName, createAccReq.LastName)
-	if err := s.store.CreateAccount(account); err != nil {
-		return err
-	}
-
-	// TODO: Do something with the JWT token
-	_, err := createJWT(account)
+	account, err := NewAccount(req.FirstName, req.LastName, req.Password)
 	if err != nil {
+		return err
+	}
+
+	if err := s.store.CreateAccount(account); err != nil {
 		return err
 	}
 

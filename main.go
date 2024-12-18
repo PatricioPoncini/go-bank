@@ -18,7 +18,7 @@ func main() {
 	}
 
 	if err := store.Init(); err != nil {
-		log.Println(err)
+		log.Fatal(err)
 	}
 
 	server := NewAPIServer(":3000", store)

@@ -43,3 +43,13 @@ To start the application, simply execute the following command:
 ```bash
 make run
 ```
+
+### 🔬 Running Tests
+To ensure everything is working as expected, you can run the test suite with the following command:
+```bash
+make test
+```
+
+---
+
+This template is clear and provides all necessary instructions for users to get started. If you need modifications or additions, let me know! 😊
